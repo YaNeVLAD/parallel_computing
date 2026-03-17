@@ -2,7 +2,7 @@
 
 void Bank::IncrementOperations() const
 {
-	m_operationCount.fetch_add(1, std::memory_order_relaxed);
+	m_operationCount.fetch_add(1);
 }
 
 Bank::Bank(const Money cash)
@@ -16,18 +16,18 @@ Bank::Bank(const Money cash)
 
 std::size_t Bank::GetOperationsCount() const
 {
-	return m_operationCount.load(std::memory_order_relaxed);
+	return m_operationCount.load();
 }
 
 Money Bank::GetCash() const
 {
-	return m_cashInCirculation.load(std::memory_order_relaxed);
+	return m_cashInCirculation.load();
 }
 
 AccountId Bank::OpenAccount()
 {
 	std::unique_lock lock(m_bankMutex);
-	const AccountId id = m_nextAccountId.fetch_add(1, std::memory_order_relaxed);
+	const AccountId id = m_nextAccountId.fetch_add(1);
 	m_accounts[id] = std::make_unique<Account>();
 	IncrementOperations();
 
@@ -45,7 +45,7 @@ Money Bank::CloseAccount(AccountId accountId)
 
 	const Money balance = it->second->balance;
 	m_accounts.erase(it);
-	m_cashInCirculation.fetch_add(balance, std::memory_order_relaxed);
+	m_cashInCirculation.fetch_add(balance);
 	IncrementOperations();
 
 	return balance;
@@ -139,7 +139,7 @@ bool Bank::TryWithdrawMoney(const AccountId account, const Money amount)
 	}
 
 	it->second->balance -= amount;
-	m_cashInCirculation.fetch_add(amount, std::memory_order_relaxed);
+	m_cashInCirculation.fetch_add(amount);
 	IncrementOperations();
 
 	return true;
@@ -159,15 +159,14 @@ void Bank::DepositMoney(const AccountId account, const Money amount)
 		throw BankOperationError("Account not found");
 	}
 
-	Money expected = m_cashInCirculation.load(std::memory_order_relaxed);
+	Money expected = m_cashInCirculation.load();
 	do
 	{
 		if (expected < amount)
 		{
 			throw BankOperationError("Not enough cash in circulation");
 		}
-	} while (!m_cashInCirculation.compare_exchange_weak(expected, expected - amount,
-		std::memory_order_release, std::memory_order_relaxed));
+	} while (!m_cashInCirculation.compare_exchange_weak(expected, expected - amount));
 
 	std::lock_guard acc_lock(it->second->mtx);
 	it->second->balance += amount;
