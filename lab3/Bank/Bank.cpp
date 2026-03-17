@@ -1,0 +1,215 @@
+#include "Bank.hpp"
+
+void Bank::IncrementOperations() const
+{
+	m_operationCount.fetch_add(1, std::memory_order_relaxed);
+}
+
+Bank::Bank(const Money cash)
+{
+	if (cash < 0)
+	{
+		throw BankOperationError("Initial cash cannot be negative");
+	}
+	m_cashInCirculation.store(cash);
+}
+
+std::size_t Bank::GetOperationsCount() const
+{
+	return m_operationCount.load(std::memory_order_relaxed);
+}
+
+Money Bank::GetCash() const
+{
+	return m_cashInCirculation.load(std::memory_order_relaxed);
+}
+
+AccountId Bank::OpenAccount()
+{
+	std::unique_lock lock(m_bankMutex);
+	const AccountId id = m_nextAccountId.fetch_add(1, std::memory_order_relaxed);
+	m_accounts[id] = std::make_unique<Account>();
+	IncrementOperations();
+
+	return id;
+}
+
+Money Bank::CloseAccount(AccountId accountId)
+{
+	std::unique_lock lock(m_bankMutex);
+	const auto it = m_accounts.find(accountId);
+	if (it == m_accounts.end())
+	{
+		throw BankOperationError("Account not found");
+	}
+
+	const Money balance = it->second->balance;
+	m_accounts.erase(it);
+	m_cashInCirculation.fetch_add(balance, std::memory_order_relaxed);
+	IncrementOperations();
+
+	return balance;
+}
+
+Money Bank::GetAccountBalance(AccountId accountId) const
+{
+	std::shared_lock lock(m_bankMutex);
+	const auto it = m_accounts.find(accountId);
+	if (it == m_accounts.end())
+	{
+		throw BankOperationError("Account not found");
+	}
+
+	std::lock_guard accountLock(it->second->mtx);
+	IncrementOperations();
+
+	return it->second->balance;
+}
+
+void Bank::SendMoney(AccountId srcAccountId, AccountId dstAccountId, Money amount)
+{
+	if (amount < 0)
+	{
+		throw std::out_of_range("Amount cannot be negative");
+	}
+	if (srcAccountId == dstAccountId)
+	{
+		return;
+	}
+
+	std::shared_lock lock(m_bankMutex);
+	const auto itSrc = m_accounts.find(srcAccountId);
+	const auto itDst = m_accounts.find(dstAccountId);
+
+	if (itSrc == m_accounts.end() || itDst == m_accounts.end())
+	{
+		throw BankOperationError("One or both accounts not found");
+	}
+
+	std::lock(itSrc->second->mtx, itDst->second->mtx);
+	std::lock_guard srcLock(itSrc->second->mtx, std::adopt_lock);
+	std::lock_guard dstLock(itDst->second->mtx, std::adopt_lock);
+
+	if (itSrc->second->balance < amount)
+	{
+		throw BankOperationError("Insufficient funds");
+	}
+
+	itSrc->second->balance -= amount;
+	itDst->second->balance += amount;
+	IncrementOperations();
+}
+bool Bank::TrySendMoney(AccountId srcAccountId, AccountId dstAccountId, Money amount)
+{
+	try
+	{
+		if (amount < 0)
+		{
+			throw std::out_of_range("Negative amount");
+		}
+		std::shared_lock lock(m_bankMutex);
+		const auto itSrc = m_accounts.find(srcAccountId);
+		const auto itDst = m_accounts.find(dstAccountId);
+		if (itSrc == m_accounts.end() || itDst == m_accounts.end())
+		{
+			throw BankOperationError("Invalid accounts");
+		}
+
+		std::lock(itSrc->second->mtx, itDst->second->mtx);
+		std::lock_guard srcLock(itSrc->second->mtx, std::adopt_lock);
+		std::lock_guard dstLock(itDst->second->mtx, std::adopt_lock);
+
+		if (itSrc->second->balance < amount)
+		{
+			return false;
+		}
+
+		itSrc->second->balance -= amount;
+		itDst->second->balance += amount;
+		IncrementOperations();
+
+		return true;
+	}
+	catch (const BankOperationError&)
+	{
+		throw;
+	}
+}
+void Bank::WithdrawMoney(AccountId account, Money amount)
+{
+	if (amount < 0)
+	{
+		throw std::out_of_range("Amount cannot be negative");
+	}
+
+	std::shared_lock lock(m_bankMutex);
+	const auto it = m_accounts.find(account);
+	if (it == m_accounts.end())
+	{
+		throw BankOperationError("Account not found");
+	}
+
+	std::lock_guard accountLock(it->second->mtx);
+	if (it->second->balance < amount)
+	{
+		throw BankOperationError("Insufficient funds");
+	}
+
+	it->second->balance -= amount;
+	m_cashInCirculation.fetch_add(amount, std::memory_order_relaxed);
+	IncrementOperations();
+}
+bool Bank::TryWithdrawMoney(AccountId account, Money amount)
+{
+	if (amount < 0)
+	{
+		throw std::out_of_range("Amount cannot be negative");
+	}
+
+	std::shared_lock lock(m_bankMutex);
+	const auto it = m_accounts.find(account);
+	if (it == m_accounts.end())
+	{
+		throw BankOperationError("Account not found");
+	}
+
+	std::lock_guard accountLock(it->second->mtx);
+	if (it->second->balance < amount)
+	{
+		return false;
+	}
+
+	it->second->balance -= amount;
+	m_cashInCirculation.fetch_add(amount, std::memory_order_relaxed);
+	IncrementOperations();
+
+	return true;
+}
+void Bank::DepositMoney(AccountId account, Money amount)
+{
+	if (amount < 0)
+	{
+		throw std::out_of_range("Amount cannot be negative");
+	}
+
+	std::shared_lock lock(m_bankMutex);
+	const auto it = m_accounts.find(account);
+	if (it == m_accounts.end())
+	{
+		throw BankOperationError("Account not found");
+	}
+
+	Money expected = m_cashInCirculation.load(std::memory_order_relaxed);
+	do
+	{
+		if (expected < amount)
+		{
+			throw BankOperationError("Not enough cash in circulation");
+		}
+	} while (!m_cashInCirculation.compare_exchange_weak(expected, expected - amount,
+		std::memory_order_release, std::memory_order_relaxed));
+
+	std::lock_guard acc_lock(it->second->mtx);
+	it->second->balance += amount;
+	IncrementOperations();
+}
