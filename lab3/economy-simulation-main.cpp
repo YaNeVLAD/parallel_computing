@@ -71,16 +71,18 @@ int main(int argc, char* argv[])
 	ActorCash lisaCash("Lisa", 0);
 	ActorCash apuCash("Apu", 0);
 
-	std::vector<std::jthread> actors;
+	{
+		std::vector<std::jthread> actors;
 
-	actors.emplace_back(HomerLogic, std::ref(bank), homerAccount, margeAccount, burnsAccount, std::ref(homerCash), std::ref(bartCash), std::ref(lisaCash));
-	actors.emplace_back(MargeLogic, std::ref(bank), margeAccount, apuAccount);
-	actors.emplace_back(KidsLogic, std::ref(bartCash), std::ref(apuCash));
-	actors.emplace_back(KidsLogic, std::ref(lisaCash), std::ref(apuCash));
-	actors.emplace_back(ApuLogic, std::ref(bank), apuAccount, burnsAccount, std::ref(apuCash));
-	actors.emplace_back(BurnsLogic, std::ref(bank), burnsAccount, homerAccount);
+		actors.emplace_back(HomerLogic, std::ref(bank), homerAccount, margeAccount, burnsAccount, std::ref(homerCash), std::ref(bartCash), std::ref(lisaCash));
+		actors.emplace_back(MargeLogic, std::ref(bank), margeAccount, apuAccount);
+		actors.emplace_back(KidsLogic, std::ref(bartCash), std::ref(apuCash));
+		actors.emplace_back(KidsLogic, std::ref(lisaCash), std::ref(apuCash));
+		actors.emplace_back(ApuLogic, std::ref(bank), apuAccount, burnsAccount, std::ref(apuCash));
+		actors.emplace_back(BurnsLogic, std::ref(bank), burnsAccount, homerAccount);
 
-	std::this_thread::sleep_for(std::chrono::seconds(settings::SIMULATION_DURATION));
+		std::this_thread::sleep_for(std::chrono::seconds(settings::SIMULATION_DURATION));
+	}
 
 	ValidateEconomy(bank, homerAccount, margeAccount, burnsAccount, apuAccount, homerCash, bartCash, lisaCash, apuCash);
 
