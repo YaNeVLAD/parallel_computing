@@ -10,6 +10,10 @@ FetchContent_Declare(
         SYSTEM)
 FetchContent_MakeAvailable(SFML)
 
-add_executable(life life-main.cpp)
+add_executable(life life-main.cpp
+        LifeGame.hpp
+        LifeIO.hpp
+        Window.hpp)
+target_link_libraries(life SFML::Graphics)
 
 add_executable(gaussian-blur gaussian-blur-main.cpp)

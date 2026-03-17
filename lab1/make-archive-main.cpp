@@ -1,5 +1,4 @@
 #include <chrono>
-#include <cstdlib>
 #include <filesystem>
 #include <iostream>
 #include <string>
@@ -9,117 +8,158 @@
 
 namespace fs = std::filesystem;
 
-int main(const int argc, char* argv[])
+struct ProgramArgs
 {
+	int maxProcesses = -1;
+	bool isValid = false;
+
+	std::string archiveName{};
+	std::vector<std::string> inputItems{};
+};
+
+void PrintUsage()
+{
+	std::cerr << "Usage:\n"
+			  << "  make-archive -S ARCHIVE-NAME [INPUT-FILES]\n"
+			  << "  make-archive -P NUM-PROCESSES ARCHIVE-NAME [INPUT-FILES]\n";
+}
+
+ProgramArgs ParseArgs(const int argc, char* argv[])
+{
+	ProgramArgs args;
 	if (argc < 4)
 	{
-		std::cerr << "Usage:\n"
-				  << "  make-archive -S ARCHIVE-NAME [INPUT-FILES]\n"
-				  << "  make-archive -P NUM-PROCESSES ARCHIVE-NAME [INPUT-FILES]\n";
-		return 1;
+		return args;
 	}
 
-	auto startTotal = std::chrono::steady_clock::now();
-
-	int maxProcesses = 1;
-	std::string archiveName;
-	std::vector<std::string> rawInputItems;
-
-	std::string modeFlag = argv[1];
+	const std::string modeFlag = argv[1];
 	int argIndex = 2;
 
 	if (modeFlag == "-P")
 	{
 		try
 		{
-			maxProcesses = std::stoi(argv[argIndex++]);
+			args.maxProcesses = std::stoi(argv[argIndex++]);
 		}
 		catch (...)
 		{
-			std::cerr << "Invalid NUM-PROCESSES argument\n";
-			return 1;
+			return args;
 		}
 	}
 	else if (modeFlag != "-S")
 	{
-		std::cerr << "Unknown mode: " << modeFlag << "\n";
-		return 1;
+		return args;
 	}
 
-	archiveName = argv[argIndex++];
+	if (argIndex >= argc)
+	{
+		return args;
+	}
+	args.archiveName = argv[argIndex++];
+
 	for (; argIndex < argc; ++argIndex)
 	{
-		rawInputItems.emplace_back(argv[argIndex]);
+		args.inputItems.emplace_back(argv[argIndex]);
 	}
 
-	std::vector<std::string> filesToProcess;
-	for (const auto& inputItem : rawInputItems)
+	args.isValid = true;
+
+	return args;
+}
+
+std::vector<std::string> CollectFiles(const std::vector<std::string>& inputs)
+{
+	std::vector<std::string> files;
+	for (const auto& item : inputs)
 	{
 		try
 		{
-			if (fs::is_directory(inputItem))
+			if (fs::is_directory(item))
 			{
 				auto options = fs::directory_options::skip_permission_denied;
-				for (const auto& entry : fs::recursive_directory_iterator(inputItem, options))
+				for (const auto& entry : fs::recursive_directory_iterator(item, options))
 				{
 					if (entry.is_regular_file())
 					{
-						filesToProcess.push_back(entry.path().string());
+						files.push_back(entry.path().string());
 					}
 				}
 			}
-			else if (fs::is_regular_file(inputItem))
+			else if (fs::is_regular_file(item))
 			{
-				filesToProcess.push_back(inputItem);
-			}
-			else
-			{
-				std::cerr << "Warning: Skipping invalid or inaccessible input: " << inputItem << "\n";
+				files.push_back(item);
 			}
 		}
 		catch (const fs::filesystem_error& e)
 		{
-			std::cerr << "Warning: Could not process " << inputItem << ": " << e.what() << "\n";
+			std::cerr << "Warning: Could not process " << item << ": " << e.what() << "\n";
 		}
 	}
 
-	if (filesToProcess.empty())
-	{
-		std::cerr << "No valid files to process. Exiting.\n";
-		return 0;
-	}
+	return files;
+}
 
+std::string CreateTempDir()
+{
 	char tempDirPath[] = "/tmp/make_archive_XXXXXX";
 	if (mkdtemp(tempDirPath) == nullptr)
 	{
-		std::cerr << "Failed to create temporary directory\n";
-		return 1;
+		return "";
 	}
-	const fs::path tempDir(tempDirPath);
 
-	ProcessManager processManager(maxProcesses);
+	return { tempDirPath };
+}
 
-	for (const auto& inputFile : filesToProcess)
+void CompressFiles(ProcessManager& pm, const std::vector<std::string>& files, const fs::path& tempDir)
+{
+	for (const auto& inputFile : files)
 	{
-		fs::path inputPath(inputFile);
 		fs::path targetPath = tempDir;
-
-		for (const auto& part : inputPath)
+		for (const auto& part : fs::path(inputFile))
 		{
-			std::string partStr = part.string();
-			if (partStr == ".." || partStr == "." || partStr == "/" || partStr == "\\")
+			std::string s = part.string();
+			if (s == ".." || s == "." || s == "/" || s == "\\")
 			{
 				continue;
 			}
 			targetPath /= part;
 		}
-		targetPath = targetPath.string() + ".gz";
+		targetPath += ".gz";
 
 		fs::create_directories(targetPath.parent_path());
-		processManager.RunAsync("gzip", { "-c", inputFile }, targetPath.string());
+		pm.RunAsync("gzip", { "-c", inputFile }, targetPath.string());
+	}
+	pm.WaitAll();
+}
+
+int main(const int argc, char* argv[])
+{
+	const auto startTotal = std::chrono::steady_clock::now();
+
+	auto [maxProcesses, isValid, archiveName, inputItems] = ParseArgs(argc, argv);
+	if (!isValid)
+	{
+		PrintUsage();
+		return 1;
 	}
 
-	processManager.WaitAll();
+	const auto filesToProcess = CollectFiles(inputItems);
+	if (filesToProcess.empty())
+	{
+		std::cerr << "No valid files to process.\n";
+		return 0;
+	}
+
+	const std::string tempDirPath = CreateTempDir();
+	if (tempDirPath.empty())
+	{
+		std::cerr << "Failed to create temp directory\n";
+		return 1;
+	}
+	const fs::path tempDir(tempDirPath);
+
+	ProcessManager processManager(maxProcesses);
+	CompressFiles(processManager, filesToProcess, tempDir);
 
 	const auto startTar = std::chrono::steady_clock::now();
 	processManager.RunSync("tar", { "-cf", archiveName, "-C", tempDir.string(), "." });
@@ -128,12 +168,11 @@ int main(const int argc, char* argv[])
 	fs::remove_all(tempDir);
 
 	const auto endTotal = std::chrono::steady_clock::now();
-
 	const std::chrono::duration<double> totalTime = endTotal - startTotal;
 	const std::chrono::duration<double> tarTime = endTar - startTar;
 
-	std::cout << "Total time: " << totalTime.count() << " seconds\n";
-	std::cout << "Sequential part (tar) time: " << tarTime.count() << " seconds\n";
+	std::cout << "Total time: " << totalTime.count() << "s\n";
+	std::cout << "Tar time: " << tarTime.count() << "s\n";
 
 	return 0;
 }
