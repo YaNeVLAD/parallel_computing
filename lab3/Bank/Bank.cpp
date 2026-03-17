@@ -66,40 +66,15 @@ Money Bank::GetAccountBalance(AccountId accountId) const
 	return it->second->balance;
 }
 
-void Bank::SendMoney(AccountId srcAccountId, AccountId dstAccountId, Money amount)
+void Bank::SendMoney(const AccountId srcAccountId, const AccountId dstAccountId, const Money amount)
 {
-	if (amount < 0)
+	if (!TrySendMoney(srcAccountId, dstAccountId, amount))
 	{
-		throw std::out_of_range("Amount cannot be negative");
+		throw BankOperationError("Insufficient funds or account not found");
 	}
-	if (srcAccountId == dstAccountId)
-	{
-		return;
-	}
-
-	std::shared_lock lock(m_bankMutex);
-	const auto itSrc = m_accounts.find(srcAccountId);
-	const auto itDst = m_accounts.find(dstAccountId);
-
-	if (itSrc == m_accounts.end() || itDst == m_accounts.end())
-	{
-		throw BankOperationError("One or both accounts not found");
-	}
-
-	std::lock(itSrc->second->mtx, itDst->second->mtx);
-	std::lock_guard srcLock(itSrc->second->mtx, std::adopt_lock);
-	std::lock_guard dstLock(itDst->second->mtx, std::adopt_lock);
-
-	if (itSrc->second->balance < amount)
-	{
-		throw BankOperationError("Insufficient funds");
-	}
-
-	itSrc->second->balance -= amount;
-	itDst->second->balance += amount;
-	IncrementOperations();
 }
-bool Bank::TrySendMoney(AccountId srcAccountId, AccountId dstAccountId, Money amount)
+
+bool Bank::TrySendMoney(const AccountId srcAccountId, const AccountId dstAccountId, const Money amount)
 {
 	try
 	{
@@ -135,31 +110,15 @@ bool Bank::TrySendMoney(AccountId srcAccountId, AccountId dstAccountId, Money am
 		throw;
 	}
 }
-void Bank::WithdrawMoney(AccountId account, Money amount)
+void Bank::WithdrawMoney(const AccountId account, const Money amount)
 {
-	if (amount < 0)
+	if (!TryWithdrawMoney(account, amount))
 	{
-		throw std::out_of_range("Amount cannot be negative");
+		throw BankOperationError("Insufficient funds or account not found");
 	}
-
-	std::shared_lock lock(m_bankMutex);
-	const auto it = m_accounts.find(account);
-	if (it == m_accounts.end())
-	{
-		throw BankOperationError("Account not found");
-	}
-
-	std::lock_guard accountLock(it->second->mtx);
-	if (it->second->balance < amount)
-	{
-		throw BankOperationError("Insufficient funds");
-	}
-
-	it->second->balance -= amount;
-	m_cashInCirculation.fetch_add(amount, std::memory_order_relaxed);
-	IncrementOperations();
 }
-bool Bank::TryWithdrawMoney(AccountId account, Money amount)
+
+bool Bank::TryWithdrawMoney(const AccountId account, const Money amount)
 {
 	if (amount < 0)
 	{
@@ -185,7 +144,8 @@ bool Bank::TryWithdrawMoney(AccountId account, Money amount)
 
 	return true;
 }
-void Bank::DepositMoney(AccountId account, Money amount)
+
+void Bank::DepositMoney(const AccountId account, const Money amount)
 {
 	if (amount < 0)
 	{

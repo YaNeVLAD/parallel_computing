@@ -55,7 +55,7 @@ int main(int argc, char* argv[])
 
 	logger.SetEnabled(enableLogging);
 
-	std::cout << "Запуск симуляции. Нажмите Ctrl+C для остановки или подождите 2 секунды...\n";
+	std::cout << "Запуск симуляции. Подождите 2 секунды...\n";
 
 	Bank bank(settings::INITIAL_MONEY);
 
