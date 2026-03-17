@@ -90,10 +90,7 @@ bool Bank::TrySendMoney(const AccountId srcAccountId, const AccountId dstAccount
 			throw BankOperationError("Invalid accounts");
 		}
 
-		std::lock(itSrc->second->mtx, itDst->second->mtx);
-		std::lock_guard srcLock(itSrc->second->mtx, std::adopt_lock);
-		std::lock_guard dstLock(itDst->second->mtx, std::adopt_lock);
-
+		auto lk = std::scoped_lock(itSrc->second->mtx, itDst->second->mtx);
 		if (itSrc->second->balance < amount)
 		{
 			return false;
