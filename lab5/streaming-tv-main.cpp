@@ -26,12 +26,12 @@ int main(const int argc, char* argv[])
 			std::thread ioThread([&] { ioContext.run(); });
 
 			tv_app::AudioCapturer audioCap(
-				[&station](const std::vector<uint8_t>& data, uint64_t ts) {
+				[&station](const std::vector<uint8_t>& data, const std::uint64_t ts) {
 					station.BroadcastAudio(data, ts);
 				});
 
 			tv_app::VideoCapturer videoCap(
-				[&station](const std::vector<uint8_t>& data, uint64_t ts, uint32_t id) {
+				[&station](const std::vector<uint8_t>& data, const std::uint64_t ts, const std::uint32_t id) {
 					station.BroadcastVideo(data, ts, id);
 				},
 				[&station] {
