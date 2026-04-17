@@ -14,14 +14,17 @@ namespace tv_app
 class AudioCapturer
 {
 public:
-	using AudioReadyCallback = std::function<void(const std::vector<uint8_t>&, uint64_t)>;
+	using AudioReadyCallback = std::function<void(const std::vector<std::uint8_t>&, std::uint64_t)>;
 
 	explicit AudioCapturer(AudioReadyCallback onAudio)
 		: m_onAudio(std::move(onAudio))
 	{
 	}
 
-	~AudioCapturer() { Stop(); }
+	~AudioCapturer()
+	{
+		Stop();
+	}
 
 	void Start()
 	{

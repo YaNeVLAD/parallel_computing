@@ -79,7 +79,7 @@ private:
 	FrameReadyCallback m_onFrame;
 	QualityRequestCallback m_getQuality;
 	uint32_t m_frameId;
-	std::atomic<bool> m_running;
+	std::atomic_bool m_running;
 	std::thread m_captureThread;
 };
 
