@@ -1,11 +1,10 @@
-#include "Receiver.hpp"
-
 #include <atomic>
 #include <iostream>
 #include <string>
 
 #include <AudioCapturer.hpp>
 #include <Common.hpp>
+#include <Receiver.hpp>
 #include <Station.hpp>
 #include <VideoCapturer.hpp>
 
