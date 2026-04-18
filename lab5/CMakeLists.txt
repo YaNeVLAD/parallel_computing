@@ -20,6 +20,7 @@ target_link_libraries(streaming-tv
 )
 
 if (MSVC)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
     target_compile_options(streaming-tv PRIVATE /W4 /wd4819)
     target_compile_definitions(streaming-tv PRIVATE WIN32_LEAN_AND_MEAN)
 else ()
