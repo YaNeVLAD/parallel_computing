@@ -17,10 +17,10 @@ enum class PacketType : uint8_t
 	Subscribe
 };
 
-constexpr std::size_t maxPayloadSize = 2048;
-constexpr int maxVideoQueue = 1000;
-constexpr int defaultQuality = 80;
-constexpr int minQuality = 10;
+constexpr std::size_t MAX_PAYLOAD_SIZE = 2048;
+constexpr int MAX_VIDEO_QUEUE_SIZE = 1000;
+constexpr int DEFAULT_VIDEO_QUALITY = 95;
+constexpr int MIN_VIDEO_QUALITY = 10;
 
 #pragma pack(push, 1)
 struct PacketHeader

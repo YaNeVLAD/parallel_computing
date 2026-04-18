@@ -39,11 +39,10 @@ public:
 		parameters.nChannels = 1;
 		parameters.firstChannel = 0;
 
-		unsigned int bufferFrames = 480;
-
 		try
 		{
 			constexpr unsigned int SAMPLE_RATE = 48000;
+			unsigned int bufferFrames = 480;
 
 			m_adc.openStream(nullptr,
 				&parameters, RTAUDIO_SINT16, SAMPLE_RATE,
@@ -88,8 +87,8 @@ private:
 		}
 
 		const auto* capturer = static_cast<AudioCapturer*>(userData);
-		const std::size_t bytesCount = nFrames * sizeof(int16_t);
-		auto* rawAudio = static_cast<uint8_t*>(inputBuffer);
+		const std::size_t bytesCount = nFrames * sizeof(std::int16_t);
+		auto* rawAudio = static_cast<std::uint8_t*>(inputBuffer);
 
 		const std::vector audioData(rawAudio, rawAudio + bytesCount);
 

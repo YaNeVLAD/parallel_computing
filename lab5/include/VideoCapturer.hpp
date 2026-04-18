@@ -19,14 +19,17 @@ public:
 	using QualityRequestCallback = std::function<int()>;
 
 	VideoCapturer(FrameReadyCallback onFrame, QualityRequestCallback getQuality)
-		: m_onFrame(std::move(onFrame))
-		, m_getQuality(std::move(getQuality))
-		, m_frameId(0)
+		: m_frameId(0)
 		, m_running(false)
+		, m_onFrame(std::move(onFrame))
+		, m_getQuality(std::move(getQuality))
 	{
 	}
 
-	~VideoCapturer() { Stop(); }
+	~VideoCapturer()
+	{
+		Stop();
+	}
 
 	void Start()
 	{
@@ -38,7 +41,9 @@ public:
 	{
 		m_running = false;
 		if (m_captureThread.joinable())
+		{
 			m_captureThread.join();
+		}
 	}
 
 private:
@@ -62,7 +67,7 @@ private:
 				continue;
 			}
 
-			const int quality = m_getQuality ? m_getQuality() : defaultQuality;
+			const int quality = m_getQuality ? m_getQuality() : DEFAULT_VIDEO_QUALITY;
 			std::vector params = { cv::IMWRITE_JPEG_QUALITY, quality };
 
 			cv::imencode(".jpg", frame, buffer, params);
@@ -76,11 +81,12 @@ private:
 		}
 	}
 
-	FrameReadyCallback m_onFrame;
-	QualityRequestCallback m_getQuality;
-	uint32_t m_frameId;
+	std::uint32_t m_frameId;
 	std::atomic_bool m_running;
 	std::thread m_captureThread;
+
+	FrameReadyCallback m_onFrame;
+	QualityRequestCallback m_getQuality;
 };
 
 } // namespace tv_app

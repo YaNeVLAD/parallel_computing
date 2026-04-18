@@ -139,11 +139,11 @@ private:
 	void StartReceive()
 	{
 		m_socket.async_receive_from(
-			boost::asio::buffer(m_recvBuffer), m_remoteEndpoint,
-			[this](const boost::system::error_code& ec, const std::size_t bytesRecv) {
-				if (!ec && bytesRecv >= sizeof(PacketHeader))
+			boost::asio::buffer(m_responseBuffer), m_remoteEndpoint,
+			[this](const boost::system::error_code& ec, const std::size_t bytes) {
+				if (!ec && bytes >= sizeof(PacketHeader))
 				{
-					ProcessPacket(bytesRecv);
+					ProcessPacket(bytes);
 				}
 				if (m_running)
 				{
@@ -152,10 +152,10 @@ private:
 			});
 	}
 
-	void ProcessPacket(const std::size_t bytesRecv)
+	void ProcessPacket(const std::size_t responseBytes)
 	{
 		PacketHeader header{};
-		std::memcpy(&header, m_recvBuffer.data(), sizeof(PacketHeader));
+		std::memcpy(&header, m_responseBuffer.data(), sizeof(PacketHeader));
 
 		header.timestamp = NetworkToHost(header.timestamp);
 		header.frameId = NetworkToHost(header.frameId);
@@ -164,7 +164,7 @@ private:
 		header.payloadSize = NetworkToHost(header.payloadSize);
 
 		constexpr std::size_t PAYLOAD_OFFSET = sizeof(PacketHeader);
-		if (bytesRecv < PAYLOAD_OFFSET + header.payloadSize)
+		if (responseBytes < PAYLOAD_OFFSET + header.payloadSize)
 		{
 			return;
 		}
@@ -178,16 +178,16 @@ private:
 
 			m_currentAudioTimestamp = header.timestamp;
 
-			std::vector<uint8_t> audioPayload(
-				m_recvBuffer.data() + PAYLOAD_OFFSET,
-				m_recvBuffer.data() + PAYLOAD_OFFSET + header.payloadSize);
+			std::vector<std::uint8_t> audioPayload(
+				m_responseBuffer.data() + PAYLOAD_OFFSET,
+				m_responseBuffer.data() + PAYLOAD_OFFSET + header.payloadSize);
 
 			std::lock_guard lock(m_audioMutex);
-			m_audioQueue.push(std::move(audioPayload));
+			m_audioQueue.emplace(std::move(audioPayload));
 		}
 		else if (header.type == PacketType::VideoData)
 		{
-			ReassembleVideo(header, m_recvBuffer.data() + PAYLOAD_OFFSET);
+			ReassembleVideo(header, m_responseBuffer.data() + PAYLOAD_OFFSET);
 		}
 	}
 
@@ -195,22 +195,21 @@ private:
 	{
 		std::lock_guard lock(m_videoMutex);
 
-		// Очистка памяти: удаляем "зависшие" сборки кадров, которые старше текущего на 20 ID
-		// (Это спасает от утечек памяти, если пакет с чанком видео был утерян)
-		std::erase_if(m_frameAssembly, [&](const auto& item) {
-			return item.first < (header.frameId > 20 ? header.frameId - 20 : 0);
+		constexpr std::uint32_t OLD_FRAME_ID_LIMIT = 20;
+		std::erase_if(m_frameAssembly, [header](const auto& item) {
+			return item.first < (header.frameId > OLD_FRAME_ID_LIMIT ? header.frameId - OLD_FRAME_ID_LIMIT : 0);
 		});
 
 		auto& [chunks, receivedChunks] = m_frameAssembly[header.frameId];
-		chunks[header.chunkIndex] = std::vector<uint8_t>(payload, payload + header.payloadSize);
+		chunks[header.chunkIndex] = std::vector<std::uint8_t>(payload, payload + header.payloadSize);
 		receivedChunks++;
 
 		if (receivedChunks == header.totalChunks)
 		{
-			std::vector<uint8_t> completeBuffer;
-			completeBuffer.reserve(header.totalChunks * maxPayloadSize);
+			std::vector<std::uint8_t> completeBuffer;
+			completeBuffer.reserve(header.totalChunks * MAX_PAYLOAD_SIZE);
 
-			for (uint16_t i = 0; i < header.totalChunks; ++i)
+			for (std::uint16_t i = 0; i < header.totalChunks; ++i)
 			{
 				completeBuffer.insert(completeBuffer.end(), chunks[i].begin(), chunks[i].end());
 			}
@@ -224,11 +223,11 @@ private:
 		}
 	}
 
-	static int AudioOutputCallback(void* outputBuffer, void* /*inputBuffer*/, unsigned int nFrames,
+	static int AudioOutputCallback(void* outputBuffer, void* /*inputBuffer*/, const unsigned int nFrames,
 		double /*streamTime*/, RtAudioStreamStatus /*status*/, void* userData)
 	{
 		auto* receiver = static_cast<Receiver*>(userData);
-		const std::size_t bytesNeeded = nFrames * sizeof(int16_t);
+		const std::size_t bytesNeeded = nFrames * sizeof(std::int16_t);
 		auto* outBuffer = static_cast<uint8_t*>(outputBuffer);
 
 		std::lock_guard lock(receiver->m_audioMutex);
@@ -260,7 +259,7 @@ private:
 	udp::endpoint m_stationEndpoint;
 	udp::endpoint m_remoteEndpoint;
 	boost::asio::steady_timer m_timer;
-	std::array<char, 65536> m_recvBuffer{};
+	std::array<char, 65536> m_responseBuffer{};
 
 	std::mutex m_videoMutex;
 	std::map<std::uint32_t, FrameAssembly> m_frameAssembly;

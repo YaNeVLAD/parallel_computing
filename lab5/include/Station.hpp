@@ -19,7 +19,7 @@ class Station
 public:
 	Station(boost::asio::io_context& ioContext, const int port)
 		: m_socket(ioContext, udp::endpoint(udp::v4(), port))
-		, m_jpegQuality(defaultQuality)
+		, m_jpegQuality(DEFAULT_VIDEO_QUALITY)
 	{
 		StartReceive();
 	}
@@ -37,15 +37,16 @@ public:
 	int CalculateRecommendedQuality()
 	{
 		std::lock_guard lock(m_queueMutex);
-		if (m_videoQueueSize > maxVideoQueue)
+		if (m_videoQueueSize > MAX_VIDEO_QUEUE_SIZE)
 		{
-			m_jpegQuality = std::max(minQuality, m_jpegQuality - 10);
+			m_jpegQuality = std::max(MIN_VIDEO_QUALITY, m_jpegQuality - 10);
 			TV_APP_LOG("Network overload. Degraded video quality to " << m_jpegQuality);
 		}
-		else if (m_videoQueueSize < (maxVideoQueue / 4) && m_jpegQuality < defaultQuality)
+		else if (m_videoQueueSize < (MAX_VIDEO_QUEUE_SIZE / 4) && m_jpegQuality < DEFAULT_VIDEO_QUALITY)
 		{
-			m_jpegQuality = std::min(defaultQuality, m_jpegQuality + 2);
+			m_jpegQuality = std::min(DEFAULT_VIDEO_QUALITY, m_jpegQuality + 2);
 		}
+
 		return m_jpegQuality;
 	}
 
@@ -53,12 +54,12 @@ private:
 	void StartReceive()
 	{
 		m_socket.async_receive_from(
-			boost::asio::buffer(m_recvBuffer), m_remoteEndpoint,
+			boost::asio::buffer(m_subReqBuffer), m_remoteEndpoint,
 			[this](const boost::system::error_code& ec, const std::size_t bytesRecv) {
 				if (!ec && bytesRecv == sizeof(PacketHeader))
 				{
 					PacketHeader header{};
-					std::memcpy(&header, m_recvBuffer.data(), sizeof(PacketHeader));
+					std::memcpy(&header, m_subReqBuffer.data(), sizeof(PacketHeader));
 					if (header.type == PacketType::Subscribe)
 					{
 						std::lock_guard lock(m_clientsMutex);
@@ -75,7 +76,7 @@ private:
 
 	void ChunkAndQueueData(PacketType type, const std::vector<std::uint8_t>& data, const std::uint64_t timestamp, const std::uint32_t frameId)
 	{
-		const auto totalChunks = static_cast<std::uint16_t>((data.size() + maxPayloadSize - 1) / maxPayloadSize);
+		const auto totalChunks = static_cast<std::uint16_t>((data.size() + MAX_PAYLOAD_SIZE - 1) / MAX_PAYLOAD_SIZE);
 
 		std::vector<udp::endpoint> localClients;
 		{
@@ -87,10 +88,10 @@ private:
 			localClients = m_clients;
 		}
 
-		for (uint16_t i = 0; i < totalChunks; ++i)
+		for (std::uint16_t i = 0; i < totalChunks; ++i)
 		{
-			const std::size_t offset = i * maxPayloadSize;
-			const std::size_t chunkSize = std::min(maxPayloadSize, data.size() - offset);
+			const std::size_t offset = i * MAX_PAYLOAD_SIZE;
+			const std::size_t chunkSize = std::min(MAX_PAYLOAD_SIZE, data.size() - offset);
 
 			PacketHeader header{};
 			header.type = type;
@@ -98,9 +99,10 @@ private:
 			header.frameId = HostToNetwork(frameId);
 			header.chunkIndex = HostToNetwork(i);
 			header.totalChunks = HostToNetwork(totalChunks);
-			header.payloadSize = HostToNetwork(static_cast<uint16_t>(chunkSize));
+			header.payloadSize = HostToNetwork(static_cast<std::uint16_t>(chunkSize));
 
-			auto packet = std::make_shared<std::vector<uint8_t>>(sizeof(PacketHeader) + chunkSize);
+			auto packet = std::make_shared<std::vector<std::uint8_t>>(sizeof(PacketHeader) + chunkSize);
+
 			std::memcpy(packet->data(), &header, sizeof(PacketHeader));
 			std::memcpy(packet->data() + sizeof(PacketHeader), data.data() + offset, chunkSize);
 
@@ -129,7 +131,7 @@ private:
 
 	udp::socket m_socket;
 	udp::endpoint m_remoteEndpoint;
-	std::array<char, 1024> m_recvBuffer{};
+	std::array<char, 1024> m_subReqBuffer{};
 
 	std::vector<udp::endpoint> m_clients;
 	std::mutex m_clientsMutex;

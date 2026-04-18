@@ -21,6 +21,7 @@ target_link_libraries(streaming-tv
 
 if (MSVC)
     target_compile_options(streaming-tv PRIVATE /W4 /wd4819)
+    target_compile_definitions(streaming-tv PRIVATE WIN32_LEAN_AND_MEAN)
 else ()
     target_compile_options(streaming-tv PRIVATE -Wall -Wextra)
 endif ()
