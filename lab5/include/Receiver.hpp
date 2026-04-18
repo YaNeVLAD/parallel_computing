@@ -171,6 +171,7 @@ private:
 
 		if (header.type == PacketType::AudioData)
 		{
+			// Добавить буфер для аудио ~ в секунду, как для видео
 			if (header.timestamp < m_currentAudioTimestamp)
 			{
 				return;

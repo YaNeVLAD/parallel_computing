@@ -22,7 +22,7 @@ int main(const int argc, char* argv[])
 			TV_APP_LOG("Starting Station on port " << port);
 
 			tv_app::Station station(ioContext, port);
-			std::thread ioThread([&] { ioContext.run(); });
+			std::jthread ioThread([&] { ioContext.run(); });
 
 			tv_app::AudioCapturer audioCap(
 				[&station](const std::vector<uint8_t>& data, const std::uint64_t ts) {
