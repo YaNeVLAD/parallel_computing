@@ -83,7 +83,6 @@ void RenderSystem::Render(const simulation::PhysicsEngine& physics)
 		const auto invColorIntensity = static_cast<std::uint8_t>(255 - colorIntensity);
 
 		m_va[i].color = sf::Color(colorIntensity, 100, invColorIntensity);
-		// m_va[i].color = sf::Color::White;
 	}
 
 	m_window.draw(m_va);
