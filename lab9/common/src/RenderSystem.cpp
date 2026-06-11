@@ -76,9 +76,9 @@ void RenderSystem::Render(const simulation::PhysicsEngine& physics)
 		const auto& p = pos[i];
 		const auto& v = vel[i];
 
-		m_va[i].position = { p.s[0], p.s[1] };
+		m_va[i].position = { p.x, p.y };
 
-		const float speed = std::sqrt(v.s[0] * v.s[0] + v.s[1] * v.s[1]);
+		const float speed = std::sqrt(v.x * v.x + v.y * v.y);
 		const auto colorIntensity = static_cast<std::uint8_t>(std::min(255.0f, speed * 5.0f));
 		const auto invColorIntensity = static_cast<std::uint8_t>(255 - colorIntensity);
 

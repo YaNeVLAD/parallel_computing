@@ -185,12 +185,12 @@ void PhysicsEngine::InitParticles()
 		const float rangeVec = distRadius(rng);
 		const float angle = distAngle(rng);
 
-		posMass.s[0] = centerX + rangeVec * std::cos(angle);
-		posMass.s[1] = centerY + rangeVec * std::sin(angle);
-		posMass.s[3] = distMass(rng);
+		posMass.x = centerX + rangeVec * std::cos(angle);
+		posMass.y = centerY + rangeVec * std::sin(angle);
+		posMass.w = distMass(rng);
 
-		velocity.s[0] = 0;
-		velocity.s[1] = 0;
+		velocity.x = 0;
+		velocity.y = 0;
 	}
 
 	m_clPosMass[0] = cl::Buffer(m_context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, sizeof(cl_float4) * m_config.maxParticles, m_posMass.data());
