@@ -75,7 +75,7 @@ PhysicsEngine::PhysicsEngine(PhysicsConfig&& m_config)
 
 void PhysicsEngine::Update()
 {
-	const int writeIndex = 1 - readIndex;
+	const unsigned short writeIndex = 1 - readIndex;
 
 	m_kernel.setArg(0, m_clPosMass[readIndex]);
 	m_kernel.setArg(1, m_clVelocity[readIndex]);
@@ -176,12 +176,9 @@ void PhysicsEngine::InitParticles()
 
 	constexpr float centerX = 1920.0f / 2.0f;
 	constexpr float centerY = 1080.0f / 2.0f;
-	constexpr float CENTER_MASS = 50'000.f;
 
-	for (size_t i = 0; i < m_config.currentParticles; ++i)
+	for (std::size_t i = 0; i < m_config.currentParticles; ++i)
 	{
-		constexpr float MAGNITUDE_SCALE = 5'000.f;
-
 		auto& posMass = m_posMass[i];
 		auto& velocity = m_velocities[i];
 
@@ -192,16 +189,9 @@ void PhysicsEngine::InitParticles()
 		posMass.s[1] = centerY + rangeVec * std::sin(angle);
 		posMass.s[3] = distMass(rng);
 
-		// const float magnitudeVec = std::sqrt(m_config.G * MAGNITUDE_SCALE / (rangeVec + 10.0f));
-		// velocity.s[0] = -magnitudeVec * std::sin(angle);
-		// velocity.s[1] = magnitudeVec * std::cos(angle);
-
 		velocity.s[0] = 0;
 		velocity.s[1] = 0;
 	}
-
-	// m_posMass[0] = { centerX, centerY, 0.0f, CENTER_MASS };
-	// m_velocities[0] = { 0.0f, 0.0f };
 
 	m_clPosMass[0] = cl::Buffer(m_context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, sizeof(cl_float4) * m_config.maxParticles, m_posMass.data());
 	m_clVelocity[0] = cl::Buffer(m_context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, sizeof(cl_float2) * m_config.maxParticles, m_velocities.data());
